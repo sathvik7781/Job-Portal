@@ -10,8 +10,9 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import JobList from './pages/JobList';
 import JobDetail from './pages/JobDetail';
-import MyApplications from './pages/MyApplications';
+import PostJob from './pages/PostJob';
 import MyJobs from './pages/MyJobs';
+import MyApplications from './pages/MyApplications';
 
 function App() {
   return (
@@ -26,58 +27,15 @@ function App() {
             <Route path="/jobs" element={<JobList />} />
             <Route path="/jobs/:id" element={<JobDetail />} />
             
-            {/* Protected Routes for Job Seekers */}
-            <Route 
-              path="/my-applications" 
-              element={
-                <ProtectedRoute>
-                  <MyApplications />
-                </ProtectedRoute>
-              } 
-            />
-            
-            {/* Protected Routes for Recruiters */}
-            <Route 
-              path="/my-jobs" 
-              element={
-                <ProtectedRoute requireRecruiter>
-                  <MyJobs />
-                </ProtectedRoute>
-              } 
-            />
-            
-            {/* Add more routes as needed */}
-            {/* <Route path="/post-job" element={<ProtectedRoute requireRecruiter><PostJob /></ProtectedRoute>} /> */}
-            {/* <Route path="/edit-job/:id" element={<ProtectedRoute requireRecruiter><EditJob /></ProtectedRoute>} /> */}
-            {/* <Route path="/job/:id/applications" element={<ProtectedRoute requireRecruiter><JobApplications /></ProtectedRoute>} /> */}
+            {/* Protected Routes */}
+            <Route path="/post-job" element={<ProtectedRoute requireRecruiter><PostJob /></ProtectedRoute>} />
+            <Route path="/my-jobs" element={<ProtectedRoute requireRecruiter><MyJobs /></ProtectedRoute>} />
+            <Route path="/my-applications" element={<ProtectedRoute><MyApplications /></ProtectedRoute>} />
             
             {/* Catch all - redirect to home */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
-          <Toaster 
-            position="top-right"
-            toastOptions={{
-              duration: 4000,
-              style: {
-                background: '#363636',
-                color: '#fff',
-                borderRadius: '10px',
-                padding: '16px',
-              },
-              success: {
-                iconTheme: {
-                  primary: '#10b981',
-                  secondary: '#fff',
-                },
-              },
-              error: {
-                iconTheme: {
-                  primary: '#ef4444',
-                  secondary: '#fff',
-                },
-              },
-            }}
-          />
+          <Toaster position="top-right" />
         </div>
       </AuthProvider>
     </Router>

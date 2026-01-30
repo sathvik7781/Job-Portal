@@ -1,48 +1,43 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { jobAPI, applicationAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { jobAPI, applicationAPI } from '../services/api';
 import toast from 'react-hot-toast';
 import {
   MapPin,
   Briefcase,
   DollarSign,
-  Calendar,
   Clock,
-  Users,
+  Calendar,
   Building2,
-  GraduationCap,
-  ArrowLeft,
-  Send,
-  Heart,
-  Share2,
+  Users,
   CheckCircle,
-  XCircle,
   AlertCircle,
-  FileText,
-  TrendingUp,
-  Target,
-  Sparkles,
-  Award,
-  Zap
+  ArrowLeft,
+  ExternalLink,
+  Share2,
+  Bookmark,
+  Flag
 } from 'lucide-react';
 
 const JobDetail = () => {
-  const { id } = useParams();
-  const navigate = useNavigate();
-  const { isAuthenticated, isSeeker, user } = useAuth();
   const [job, setJob] = useState(null);
   const [loading, setLoading] = useState(true);
   const [applying, setApplying] = useState(false);
-  const [showApplicationForm, setShowApplicationForm] = useState(false);
-  const [coverLetter, setCoverLetter] = useState('');
   const [hasApplied, setHasApplied] = useState(false);
-  const [isSaved, setIsSaved] = useState(false);
+  const [coverLetter, setCoverLetter] = useState('');
+  const [showApplyForm, setShowApplyForm] = useState(false);
+  
+  const { id } = useParams();
+  const { isAuthenticated, isSeeker, user } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchJobDetails();
-    checkApplicationStatus();
-  }, [id]);
+    if (isAuthenticated && isSeeker) {
+      checkApplicationStatus();
+    }
+  }, [id, isAuthenticated, isSeeker]);
 
   const fetchJobDetails = async () => {
     try {
@@ -58,20 +53,19 @@ const JobDetail = () => {
   };
 
   const checkApplicationStatus = async () => {
-    if (!isAuthenticated || !isSeeker) return;
-    
     try {
       const response = await applicationAPI.getMyApplications();
-      const applied = response.data.data.some(app => app.job?._id === id);
+      const applications = response.data.data;
+      const applied = applications.some(app => app.job?._id === id);
       setHasApplied(applied);
     } catch (error) {
-      // Silently fail
+      console.error('Failed to check application status:', error);
     }
   };
 
   const handleApply = async (e) => {
     e.preventDefault();
-
+    
     if (!isAuthenticated) {
       toast.error('Please login to apply');
       navigate('/login');
@@ -79,25 +73,20 @@ const JobDetail = () => {
     }
 
     if (!isSeeker) {
-      toast.error('Only job seekers can apply');
-      return;
-    }
-
-    if (hasApplied) {
-      toast.error('You have already applied to this job');
+      toast.error('Only job seekers can apply for jobs');
       return;
     }
 
     try {
       setApplying(true);
       await applicationAPI.applyForJob({
-        job: id,
-        coverLetter: coverLetter.trim() || undefined
+        jobId: id,
+        coverLetter: coverLetter.trim()
       });
       
       toast.success('Application submitted successfully!');
       setHasApplied(true);
-      setShowApplicationForm(false);
+      setShowApplyForm(false);
       setCoverLetter('');
     } catch (error) {
       const message = error.response?.data?.message || 'Failed to submit application';
@@ -107,27 +96,13 @@ const JobDetail = () => {
     }
   };
 
-  const handleSave = () => {
-    setIsSaved(!isSaved);
-    toast.success(isSaved ? 'Removed from saved jobs' : 'Job saved successfully');
-  };
-
-  const handleShare = async () => {
-    try {
-      await navigator.share({
-        title: job.title,
-        text: `Check out this job: ${job.title} at ${job.company}`,
-        url: window.location.href
-      });
-    } catch (error) {
-      // Fallback to copying URL
-      navigator.clipboard.writeText(window.location.href);
-      toast.success('Link copied to clipboard');
-    }
+  const handleShare = () => {
+    navigator.clipboard.writeText(window.location.href);
+    toast.success('Job link copied to clipboard!');
   };
 
   const formatSalary = (min, max, currency) => {
-    if (!min && !max) return 'Competitive';
+    if (!min && !max) return 'Salary not specified';
     const formatter = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
     return `${currency || 'USD'} ${formatter.format(min)} - ${formatter.format(max)}`;
   };
@@ -145,10 +120,17 @@ const JobDetail = () => {
     return new Date(deadline) < new Date();
   };
 
-  const getDaysUntilDeadline = (deadline) => {
-    if (!deadline) return null;
-    const days = Math.ceil((new Date(deadline) - new Date()) / (1000 * 60 * 60 * 24));
-    return days;
+  const getTimeAgo = (dateString) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffInMs = now - date;
+    const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
+    
+    if (diffInDays === 0) return 'Posted today';
+    if (diffInDays === 1) return 'Posted yesterday';
+    if (diffInDays < 7) return `Posted ${diffInDays} days ago`;
+    if (diffInDays < 30) return `Posted ${Math.floor(diffInDays / 7)} weeks ago`;
+    return `Posted ${Math.floor(diffInDays / 30)} months ago`;
   };
 
   if (loading) {
@@ -156,7 +138,7 @@ const JobDetail = () => {
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-blue-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-primary-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 text-lg">Loading job details...</p>
+          <p className="text-gray-600">Loading job details...</p>
         </div>
       </div>
     );
@@ -164,179 +146,156 @@ const JobDetail = () => {
 
   if (!job) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-blue-50">
         <div className="text-center">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">Job not found</h2>
-          <Link to="/jobs" className="btn-primary">Back to Jobs</Link>
+          <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Job Not Found</h2>
+          <p className="text-gray-600 mb-6">The job you're looking for doesn't exist or has been removed.</p>
+          <Link to="/jobs" className="btn-primary">
+            Browse Other Jobs
+          </Link>
         </div>
       </div>
     );
   }
 
-  const daysUntilDeadline = getDaysUntilDeadline(job.deadline);
-  const isUrgent = daysUntilDeadline !== null && daysUntilDeadline <= 7 && daysUntilDeadline > 0;
+  const canApply = isAuthenticated && isSeeker && job.status === 'active' && !hasApplied && !isDeadlinePassed(job.deadline);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 py-8">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Back Button */}
-        <button
-          onClick={() => navigate('/jobs')}
-          className="group flex items-center gap-2 text-gray-600 hover:text-primary-600 mb-6 transition-colors"
+        <Link
+          to="/jobs"
+          className="inline-flex items-center gap-2 text-gray-600 hover:text-primary-600 mb-6 transition-colors"
         >
-          <ArrowLeft className="h-5 w-5 group-hover:-translate-x-1 transition-transform" />
-          <span className="font-medium">Back to Jobs</span>
-        </button>
+          <ArrowLeft className="h-5 w-5" />
+          Back to Jobs
+        </Link>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main Content */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Job Header Card */}
-            <div className="bg-white rounded-2xl shadow-xl p-8 border-2 border-transparent hover:border-primary-200 transition-all">
-              {/* Company Badge */}
-              <div className="flex items-center gap-4 mb-6">
-                <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center text-white font-bold text-3xl shadow-lg">
-                  {job.company.charAt(0)}
+            {/* Job Header */}
+            <div className="bg-white rounded-xl shadow-lg p-8 border border-gray-200">
+              <div className="flex items-start gap-6 mb-6">
+                <div className="flex-shrink-0 w-20 h-20 bg-gradient-to-br from-primary-500 to-blue-600 rounded-xl flex items-center justify-center text-white font-bold text-3xl shadow-lg">
+                  {job.company?.charAt(0) || 'J'}
                 </div>
-                <div>
-                  <h1 className="text-3xl font-extrabold text-gray-900 mb-2">{job.title}</h1>
-                  <div className="flex items-center gap-2 text-lg text-gray-700">
-                    <Building2 className="h-5 w-5" />
-                    <span className="font-semibold">{job.company}</span>
+                
+                <div className="flex-1">
+                  <div className="flex items-start justify-between gap-4 mb-3">
+                    <div>
+                      <h1 className="text-3xl font-bold text-gray-900 mb-2">{job.title}</h1>
+                      <p className="text-xl text-gray-700 font-medium">{job.company}</p>
+                    </div>
+                    
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleShare}
+                        className="p-2 text-gray-600 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+                        title="Share job"
+                      >
+                        <Share2 className="h-5 w-5" />
+                      </button>
+                      <button
+                        className="p-2 text-gray-600 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+                        title="Save job"
+                      >
+                        <Bookmark className="h-5 w-5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-3 text-sm text-gray-600 mb-4">
+                    <span className="flex items-center gap-1">
+                      <MapPin className="h-4 w-4" />
+                      {job.location}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Briefcase className="h-4 w-4" />
+                      {job.jobType}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Users className="h-4 w-4" />
+                      {job.experienceLevel}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Clock className="h-4 w-4" />
+                      {getTimeAgo(job.createdAt)}
+                    </span>
+                  </div>
+
+                  {/* Status Badges */}
+                  <div className="flex flex-wrap gap-2">
+                    {job.status === 'active' && (
+                      <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium border border-green-200">
+                        <CheckCircle className="h-4 w-4" />
+                        Active
+                      </span>
+                    )}
+                    {job.status === 'closed' && (
+                      <span className="inline-flex items-center gap-1 px-3 py-1 bg-red-100 text-red-800 rounded-full text-sm font-medium border border-red-200">
+                        <AlertCircle className="h-4 w-4" />
+                        Closed
+                      </span>
+                    )}
+                    {hasApplied && (
+                      <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium border border-blue-200">
+                        <CheckCircle className="h-4 w-4" />
+                        Applied
+                      </span>
+                    )}
+                    {job.deadline && (
+                      <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium border ${
+                        isDeadlinePassed(job.deadline)
+                          ? 'bg-red-100 text-red-800 border-red-200'
+                          : 'bg-yellow-100 text-yellow-800 border-yellow-200'
+                      }`}>
+                        <Calendar className="h-4 w-4" />
+                        {isDeadlinePassed(job.deadline) ? 'Deadline Passed' : `Deadline: ${formatDate(job.deadline)}`}
+                      </span>
+                    )}
                   </div>
                 </div>
-              </div>
-
-              {/* Status Badges */}
-              <div className="flex flex-wrap gap-3 mb-6">
-                <span className="inline-flex items-center gap-1.5 px-4 py-2 bg-green-100 text-green-800 rounded-full text-sm font-semibold border-2 border-green-200">
-                  <CheckCircle className="h-4 w-4" />
-                  {job.status === 'active' ? 'Actively Hiring' : job.status}
-                </span>
-                <span className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-100 text-blue-800 rounded-full text-sm font-semibold border-2 border-blue-200">
-                  <Briefcase className="h-4 w-4" />
-                  {job.jobType}
-                </span>
-                {isUrgent && (
-                  <span className="inline-flex items-center gap-1.5 px-4 py-2 bg-red-100 text-red-800 rounded-full text-sm font-semibold border-2 border-red-200 animate-pulse">
-                    <Zap className="h-4 w-4" />
-                    {daysUntilDeadline} days left
-                  </span>
-                )}
-              </div>
-
-              {/* Key Info Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-6 bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl border border-blue-100">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-white rounded-lg shadow">
-                    <MapPin className="h-5 w-5 text-blue-600" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-600 font-medium">Location</p>
-                    <p className="text-sm font-bold text-gray-900">{job.location}</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-white rounded-lg shadow">
-                    <DollarSign className="h-5 w-5 text-green-600" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-600 font-medium">Salary Range</p>
-                    <p className="text-sm font-bold text-gray-900">
-                      {formatSalary(job.salary?.min, job.salary?.max, job.salary?.currency)}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-white rounded-lg shadow">
-                    <GraduationCap className="h-5 w-5 text-purple-600" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-600 font-medium">Experience</p>
-                    <p className="text-sm font-bold text-gray-900">{job.experienceLevel}</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-white rounded-lg shadow">
-                    <Users className="h-5 w-5 text-pink-600" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-600 font-medium">Openings</p>
-                    <p className="text-sm font-bold text-gray-900">{job.openings} position{job.openings !== 1 ? 's' : ''}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex flex-wrap gap-3 mt-6">
-                <button
-                  onClick={handleSave}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg border-2 transition-all ${
-                    isSaved
-                      ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'
-                      : 'bg-white text-gray-700 border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  <Heart className={`h-4 w-4 ${isSaved ? 'fill-current' : ''}`} />
-                  {isSaved ? 'Saved' : 'Save Job'}
-                </button>
-
-                <button
-                  onClick={handleShare}
-                  className="flex items-center gap-2 px-4 py-2 bg-white text-gray-700 rounded-lg border-2 border-gray-200 hover:border-gray-300 transition-all"
-                >
-                  <Share2 className="h-4 w-4" />
-                  Share
-                </button>
               </div>
             </div>
 
             {/* Job Description */}
-            <div className="bg-white rounded-2xl shadow-lg p-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-                <FileText className="h-6 w-6 text-primary-600" />
-                Job Description
-              </h2>
-              <div className="prose max-w-none text-gray-700 leading-relaxed">
-                {job.description.split('\n').map((paragraph, index) => (
-                  <p key={index} className="mb-4">{paragraph}</p>
-                ))}
+            <div className="bg-white rounded-xl shadow-lg p-8 border border-gray-200">
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">Job Description</h2>
+              <div className="prose max-w-none text-gray-700 whitespace-pre-wrap">
+                {job.description}
               </div>
             </div>
 
             {/* Requirements */}
-            {job.requirements && job.requirements.length > 0 && (
-              <div className="bg-white rounded-2xl shadow-lg p-8">
-                <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-                  <Target className="h-6 w-6 text-primary-600" />
-                  Requirements
-                </h2>
-                <ul className="space-y-3">
-                  {job.requirements.map((req, index) => (
-                    <li key={index} className="flex items-start gap-3">
-                      <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
-                      <span className="text-gray-700">{req}</span>
-                    </li>
-                  ))}
-                </ul>
+            <div className="bg-white rounded-xl shadow-lg p-8 border border-gray-200">
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">Requirements</h2>
+              <div className="prose max-w-none text-gray-700 whitespace-pre-wrap">
+                {job.requirements}
+              </div>
+            </div>
+
+            {/* Responsibilities */}
+            {job.responsibilities && (
+              <div className="bg-white rounded-xl shadow-lg p-8 border border-gray-200">
+                <h2 className="text-2xl font-bold text-gray-900 mb-4">Responsibilities</h2>
+                <div className="prose max-w-none text-gray-700 whitespace-pre-wrap">
+                  {job.responsibilities}
+                </div>
               </div>
             )}
 
-            {/* Skills Required */}
+            {/* Skills */}
             {job.skills && job.skills.length > 0 && (
-              <div className="bg-white rounded-2xl shadow-lg p-8">
-                <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-                  <Award className="h-6 w-6 text-primary-600" />
-                  Skills Required
-                </h2>
-                <div className="flex flex-wrap gap-3">
+              <div className="bg-white rounded-xl shadow-lg p-8 border border-gray-200">
+                <h2 className="text-2xl font-bold text-gray-900 mb-4">Required Skills</h2>
+                <div className="flex flex-wrap gap-2">
                   {job.skills.map((skill, index) => (
                     <span
                       key={index}
-                      className="px-4 py-2 bg-gradient-to-r from-blue-50 to-purple-50 text-gray-800 rounded-lg font-medium border-2 border-blue-100 hover:border-blue-300 transition-colors"
+                      className="px-4 py-2 bg-primary-100 text-primary-800 rounded-lg text-sm font-medium border border-primary-200"
                     >
                       {skill}
                     </span>
@@ -347,198 +306,178 @@ const JobDetail = () => {
 
             {/* Benefits */}
             {job.benefits && job.benefits.length > 0 && (
-              <div className="bg-white rounded-2xl shadow-lg p-8">
-                <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-                  <Sparkles className="h-6 w-6 text-primary-600" />
-                  Benefits & Perks
-                </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-white rounded-xl shadow-lg p-8 border border-gray-200">
+                <h2 className="text-2xl font-bold text-gray-900 mb-4">Benefits</h2>
+                <div className="flex flex-wrap gap-2">
                   {job.benefits.map((benefit, index) => (
-                    <div key={index} className="flex items-center gap-3 p-4 bg-gradient-to-r from-green-50 to-blue-50 rounded-lg border border-green-100">
-                      <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
-                      <span className="text-gray-700 font-medium">{benefit}</span>
-                    </div>
+                    <span
+                      key={index}
+                      className="px-4 py-2 bg-green-100 text-green-800 rounded-lg text-sm font-medium border border-green-200"
+                    >
+                      {benefit}
+                    </span>
                   ))}
                 </div>
               </div>
             )}
           </div>
 
-          {/* Sidebar - Application Section */}
-          <div className="lg:col-span-1">
-            <div className="sticky top-24 space-y-6">
-              {/* Ready to Apply Card */}
-              <div className="bg-gradient-to-br from-blue-600 via-purple-600 to-pink-600 rounded-2xl shadow-2xl p-8 text-white overflow-hidden relative">
-                {/* Decorative Elements */}
-                <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-2xl"></div>
-                <div className="absolute bottom-0 left-0 w-32 h-32 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2 blur-2xl"></div>
-                
-                <div className="relative z-10">
-                  <div className="flex items-center gap-2 mb-4">
-                    <Sparkles className="h-6 w-6 text-yellow-300" />
-                    <span className="text-sm font-semibold text-white/90">Ready to Apply?</span>
-                  </div>
+          {/* Sidebar */}
+          <div className="space-y-6">
+            {/* Apply Card */}
+            <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200 sticky top-6">
+              <div className="mb-6">
+                <div className="flex items-center gap-2 text-2xl font-bold text-gray-900 mb-2">
+                  <DollarSign className="h-6 w-6 text-primary-600" />
+                  {formatSalary(job.salary?.min, job.salary?.max, job.salary?.currency)}
+                </div>
+                <p className="text-sm text-gray-600">Per year</p>
+              </div>
 
-                  <h3 className="text-2xl font-extrabold mb-4">
-                    {hasApplied ? "You've Applied!" : 'Take the Next Step'}
-                  </h3>
-
-                  {hasApplied ? (
-                    <div className="space-y-4">
-                      <div className="flex items-center gap-3 p-4 bg-white/20 backdrop-blur-sm rounded-xl">
-                        <CheckCircle className="h-6 w-6 text-green-300" />
-                        <span className="text-sm font-medium">Application submitted successfully</span>
-                      </div>
-                      <Link
-                        to="/my-applications"
-                        className="block w-full px-6 py-3 bg-white text-purple-600 rounded-xl font-bold text-center hover:bg-gray-100 transition-colors"
+              {canApply ? (
+                !showApplyForm ? (
+                  <button
+                    onClick={() => setShowApplyForm(true)}
+                    className="w-full btn-primary py-3 text-lg"
+                  >
+                    Apply Now
+                  </button>
+                ) : (
+                  <form onSubmit={handleApply} className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Cover Letter
+                      </label>
+                      <textarea
+                        value={coverLetter}
+                        onChange={(e) => setCoverLetter(e.target.value)}
+                        rows={6}
+                        className="input-field resize-none text-sm"
+                        placeholder="Tell us why you're a great fit for this role..."
+                        required
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowApplyForm(false)}
+                        className="flex-1 btn-secondary py-2"
                       >
-                        View My Applications
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={applying}
+                        className="flex-1 btn-primary py-2"
+                      >
+                        {applying ? 'Submitting...' : 'Submit'}
+                      </button>
+                    </div>
+                  </form>
+                )
+              ) : (
+                <div>
+                  {!isAuthenticated ? (
+                    <Link to="/login" className="w-full btn-primary py-3 text-lg block text-center">
+                      Login to Apply
+                    </Link>
+                  ) : hasApplied ? (
+                    <div className="text-center py-4">
+                      <CheckCircle className="h-12 w-12 text-green-600 mx-auto mb-2" />
+                      <p className="text-green-800 font-medium">Already Applied</p>
+                      <Link to="/my-applications" className="text-sm text-primary-600 hover:underline mt-2 inline-block">
+                        View Application
                       </Link>
                     </div>
-                  ) : job.status === 'active' && !isDeadlinePassed(job.deadline) ? (
-                    <>
-                      {!showApplicationForm ? (
-                        <button
-                          onClick={() => setShowApplicationForm(true)}
-                          className="w-full px-6 py-4 bg-white text-purple-600 rounded-xl font-bold text-lg shadow-xl hover:shadow-2xl hover:scale-105 transition-all duration-300 flex items-center justify-center gap-2"
-                        >
-                          Apply Now
-                          <Send className="h-5 w-5" />
-                        </button>
-                      ) : (
-                        <form onSubmit={handleApply} className="space-y-4">
-                          <div>
-                            <label className="block text-sm font-semibold mb-2 text-white/90">
-                              Cover Letter (Optional)
-                            </label>
-                            <textarea
-                              value={coverLetter}
-                              onChange={(e) => setCoverLetter(e.target.value)}
-                              placeholder="Tell us why you're perfect for this role..."
-                              rows="6"
-                              className="w-full px-4 py-3 bg-white/10 backdrop-blur-sm border-2 border-white/20 rounded-xl text-white placeholder-white/60 focus:border-white/40 focus:ring-2 focus:ring-white/20 transition-all resize-none"
-                            />
-                            <p className="text-xs text-white/70 mt-2">
-                              {coverLetter.length} characters
-                            </p>
-                          </div>
-
-                          <div className="flex gap-3">
-                            <button
-                              type="button"
-                              onClick={() => setShowApplicationForm(false)}
-                              className="flex-1 px-4 py-3 bg-white/10 backdrop-blur-sm text-white rounded-xl font-semibold hover:bg-white/20 transition-all border-2 border-white/20"
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              type="submit"
-                              disabled={applying}
-                              className="flex-1 px-4 py-3 bg-white text-purple-600 rounded-xl font-bold hover:bg-gray-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
-                            >
-                              {applying ? (
-                                <span className="flex items-center justify-center gap-2">
-                                  <div className="animate-spin h-4 w-4 border-2 border-purple-600 border-t-transparent rounded-full"></div>
-                                  Submitting...
-                                </span>
-                              ) : (
-                                <span className="flex items-center justify-center gap-2">
-                                  Submit
-                                  <Send className="h-4 w-4" />
-                                </span>
-                              )}
-                            </button>
-                          </div>
-                        </form>
-                      )}
-
-                      {!showApplicationForm && (
-                        <div className="mt-6 space-y-3 text-sm text-white/80">
-                          <div className="flex items-center gap-2">
-                            <CheckCircle className="h-4 w-4" />
-                            <span>Quick application process</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <CheckCircle className="h-4 w-4" />
-                            <span>Hear back within 48 hours</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <CheckCircle className="h-4 w-4" />
-                            <span>Direct employer contact</span>
-                          </div>
-                        </div>
-                      )}
-                    </>
+                  ) : job.status !== 'active' ? (
+                    <div className="text-center py-4 text-gray-600">
+                      <AlertCircle className="h-12 w-12 text-gray-400 mx-auto mb-2" />
+                      <p className="font-medium">This job is no longer accepting applications</p>
+                    </div>
+                  ) : isDeadlinePassed(job.deadline) ? (
+                    <div className="text-center py-4 text-red-600">
+                      <AlertCircle className="h-12 w-12 text-red-400 mx-auto mb-2" />
+                      <p className="font-medium">Application deadline has passed</p>
+                    </div>
                   ) : (
-                    <div className="flex items-center gap-3 p-4 bg-white/20 backdrop-blur-sm rounded-xl">
-                      <XCircle className="h-6 w-6 text-red-300" />
-                      <span className="text-sm font-medium">
-                        {isDeadlinePassed(job.deadline) ? 'Application deadline has passed' : 'This job is no longer accepting applications'}
-                      </span>
+                    <div className="text-center py-4 text-gray-600">
+                      <p className="font-medium">Only job seekers can apply</p>
                     </div>
                   )}
                 </div>
-              </div>
+              )}
 
-              {/* Job Info Card */}
-              <div className="bg-white rounded-2xl shadow-lg p-6">
-                <h3 className="text-lg font-bold text-gray-900 mb-4">Job Information</h3>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between py-3 border-b border-gray-100">
-                    <span className="text-sm text-gray-600 flex items-center gap-2">
-                      <Calendar className="h-4 w-4" />
-                      Posted
-                    </span>
-                    <span className="text-sm font-semibold text-gray-900">{formatDate(job.createdAt)}</span>
-                  </div>
+              {job.applicationUrl && (
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <a
+                    href={job.applicationUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full btn-outline py-2 flex items-center justify-center gap-2"
+                  >
+                    Apply on Company Site
+                    <ExternalLink className="h-4 w-4" />
+                  </a>
+                </div>
+              )}
+            </div>
 
-                  {job.deadline && (
-                    <div className="flex items-center justify-between py-3 border-b border-gray-100">
-                      <span className="text-sm text-gray-600 flex items-center gap-2">
-                        <Clock className="h-4 w-4" />
-                        Deadline
-                      </span>
-                      <span className={`text-sm font-semibold ${isDeadlinePassed(job.deadline) ? 'text-red-600' : isUrgent ? 'text-orange-600' : 'text-gray-900'}`}>
-                        {formatDate(job.deadline)}
-                      </span>
-                    </div>
-                  )}
-
-                  <div className="flex items-center justify-between py-3 border-b border-gray-100">
-                    <span className="text-sm text-gray-600 flex items-center gap-2">
-                      <Users className="h-4 w-4" />
-                      Applicants
-                    </span>
-                    <span className="text-sm font-semibold text-gray-900">
-                      {job.applicationCount || 0} {job.applicationCount === 1 ? 'applicant' : 'applicants'}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between py-3">
-                    <span className="text-sm text-gray-600 flex items-center gap-2">
-                      <TrendingUp className="h-4 w-4" />
-                      Job ID
-                    </span>
-                    <span className="text-sm font-mono font-semibold text-gray-900">#{job._id.slice(-8)}</span>
+            {/* Job Info Card */}
+            <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200">
+              <h3 className="text-lg font-bold text-gray-900 mb-4">Job Information</h3>
+              <div className="space-y-4 text-sm">
+                <div className="flex items-start gap-3">
+                  <Building2 className="h-5 w-5 text-gray-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-gray-600 mb-1">Company</p>
+                    <p className="font-medium text-gray-900">{job.company}</p>
                   </div>
                 </div>
-              </div>
-
-              {/* Similar Jobs Teaser */}
-              <div className="bg-gradient-to-br from-gray-50 to-blue-50 rounded-2xl shadow-lg p-6 border-2 border-blue-100">
-                <h3 className="text-lg font-bold text-gray-900 mb-3">Looking for more?</h3>
-                <p className="text-sm text-gray-600 mb-4">
-                  Explore similar opportunities that match your profile
-                </p>
-                <Link
-                  to="/jobs"
-                  className="block w-full px-4 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-semibold text-center hover:shadow-lg transition-all"
-                >
-                  Browse All Jobs
-                </Link>
+                <div className="flex items-start gap-3">
+                  <MapPin className="h-5 w-5 text-gray-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-gray-600 mb-1">Location</p>
+                    <p className="font-medium text-gray-900">{job.location}</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <Briefcase className="h-5 w-5 text-gray-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-gray-600 mb-1">Job Type</p>
+                    <p className="font-medium text-gray-900 capitalize">{job.jobType}</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <Users className="h-5 w-5 text-gray-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-gray-600 mb-1">Experience Level</p>
+                    <p className="font-medium text-gray-900 capitalize">{job.experienceLevel}</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <Calendar className="h-5 w-5 text-gray-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-gray-600 mb-1">Posted</p>
+                    <p className="font-medium text-gray-900">{formatDate(job.createdAt)}</p>
+                  </div>
+                </div>
+                {job.openings && (
+                  <div className="flex items-start gap-3">
+                    <Users className="h-5 w-5 text-gray-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-gray-600 mb-1">Openings</p>
+                      <p className="font-medium text-gray-900">{job.openings}</p>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
+
+            {/* Report Button */}
+            <button className="w-full flex items-center justify-center gap-2 text-gray-600 hover:text-red-600 py-2 text-sm transition-colors">
+              <Flag className="h-4 w-4" />
+              Report this job
+            </button>
           </div>
         </div>
       </div>
