@@ -6,7 +6,7 @@ const {
   getMyApplications,
   updateApplicationStatus,
   withdrawApplication,
-} = require("../controllers/applicationController");
+} = require("../controllers/applicationControllerEnhanced");
 const { authenticate, authorize } = require("../middleware/auth");
 
 // All routes require authentication
@@ -19,6 +19,10 @@ router.delete("/:id", authorize("seeker"), withdrawApplication);
 
 // Recruiter/Admin routes
 router.get("/job/:jobId", authorize("recruiter", "admin"), getJobApplications);
-router.put("/:id/status", authorize("recruiter", "admin"), updateApplicationStatus);
+router.put(
+  "/:id/status",
+  authorize("recruiter", "admin"),
+  updateApplicationStatus,
+);
 
 module.exports = router;
